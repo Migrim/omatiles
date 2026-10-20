@@ -5,7 +5,6 @@ const path = require('node:path');
 const vm = require('node:vm');
 const calendar = require('../calendar/Model.js');
 const config = require('../Config.js');
-const glyphs = require('../Glyphs.js');
 
 // Ui.js has no exports and uses Qt.rgba / Qt.color: run it in a context with a tiny Qt shim.
 const Qt = {
@@ -86,13 +85,6 @@ test('new widget tile defaults to 4x4 and enabled', () => {
   assert.deepEqual(c.tiles['owl:a/b'], {enabled: true, col: 0, row: 0, w: 4, h: 4});
 });
 
-test('dock keeps only non-empty strings', () => {
-  assert.deepEqual(config.parse(JSON.stringify({dock: ['a', '', 5, null, 'b', {}]})).dock, ['a', 'b']);
-  assert.deepEqual(config.parse(JSON.stringify({dock: []})).dock, []);
-  assert.deepEqual(config.parse(JSON.stringify({dock: 'x'})).dock, config.defaults().dock);
-  assert.equal(config.parse(JSON.stringify({dock: Array.from({length: 40}, (_, i) => 'a' + i)})).dock.length, 24);
-});
-
 test('clock is auto, 12 or 24', () => {
   assert.equal(config.parse('{}').clock, 'auto');
   for (const v of ['auto', '12', '24']) assert.equal(config.parse(JSON.stringify({clock: v})).clock, v);
@@ -105,11 +97,15 @@ test('units are restricted to auto, metric and imperial', () => {
   for (const u of ['kelvin', 5, null, 'METRIC']) assert.equal(config.parse(JSON.stringify({units: u})).units, 'auto');
 });
 
-test('booleans: dockMono and menuHint only accept booleans', () => {
-  assert.equal(config.parse('{"dockMono":true,"menuHint":false}').dockMono, true);
-  assert.equal(config.parse('{"dockMono":true,"menuHint":false}').menuHint, false);
-  assert.equal(config.parse('{"dockMono":"yes","menuHint":0}').dockMono, false);
-  assert.equal(config.parse('{"dockMono":"yes","menuHint":0}').menuHint, true);
+test('translucent defaults on and only accepts booleans', () => {
+  assert.equal(config.parse('{}').translucent, true);
+  assert.equal(config.parse('{"translucent":false}').translucent, false);
+  for (const v of [0, 'false', null]) assert.equal(config.parse(JSON.stringify({translucent: v})).translucent, true);
+});
+
+test('booleans: menuHint only accepts booleans', () => {
+  assert.equal(config.parse('{"menuHint":false}').menuHint, false);
+  assert.equal(config.parse('{"menuHint":0}').menuHint, true);
 });
 
 test('remote.link.url is kept only when http(s)', () => {
@@ -268,80 +264,4 @@ test('dayEvents includes multi-day events and respects day edges', () => {
   assert.ok(calendar.onDay(events, 2026, 9, 11));
   assert.ok(!calendar.onDay(events, 2026, 9, 20));
   assert.deepEqual(calendar.dayEvents([], 2026, 9, 1), []);
-});
-
-// ── Glyphs: dock icons as logos or symbols ────────────────────────────────────
-const brands = require('../Brands.js').PATHS;
-const look = (e, o) => glyphs.look(e, o, brands);
-const cp = (m) => m && m.glyph ? 'U+' + m.glyph.codePointAt(0).toString(16).toUpperCase() : '';
-const logo = (slug) => ({path: brands[slug]});
-
-test('every logo the rules name is vendored, as one 24x24 path', () => {
-  for (const [, , slug] of glyphs.BRANDS) assert.ok(brands[slug], slug);
-  for (const d of Object.values(brands)) assert.match(d, /^[Mm][MmLlHhVvCcSsQqTtAaZz\d\s.,+\-eE]+$/);
-});
-
-test('apps get their own logo by name, then id or icon', () => {
-  assert.deepEqual(look({id: 'chromium', name: 'Chromium'}), logo('googlechrome'));
-  assert.deepEqual(look({id: 'com.mitchellh.ghostty', name: 'Ghostty'}), logo('ghostty'));
-  assert.deepEqual(look({id: 'org.telegram.desktop', name: 'Telegram Desktop'}), logo('telegram'));
-  assert.deepEqual(look({id: 'obsidian', name: 'Obsidian'}), logo('obsidian'));
-  assert.deepEqual(look({id: 'X', name: 'X'}), logo('x'));
-  assert.deepEqual(look({id: 'yt', name: 'YouTube Music'}), logo('youtubemusic'));
-  assert.deepEqual(look({id: 'my-discord', name: 'Chat app', icon: 'omarchy-discord'}), logo('discord'));
-});
-
-test('a Chrome web app gets its own logo, never Chromium\'s', () => {
-  assert.deepEqual(look({id: 'chrome-fmp-Default', name: 'Claude', icon: 'chrome-fmp-Default'}), logo('claude'));
-  const other = look({id: 'chrome-nfaecocciihflaoagabpadoaiidbnfek-Default', name: 'Some Web App', icon: 'chrome-nfaecocciihflaoagabpadoaiidbnfek-Default'});
-  assert.equal(other.path, undefined);
-  assert.equal(cp(other), 'U+F0C23');
-});
-
-test('generic tools and categories get a symbol; the rest their initial', () => {
-  assert.equal(cp(look({id: 'org.gnome.Nautilus', name: 'Files'})), 'U+F024B');
-  assert.equal(cp(look({id: 'zz', name: 'Zzterm', categories: ['System', 'TerminalEmulator']})), 'U+F018D');
-  assert.equal(cp(look({id: 'zz', name: 'Zz', categories: {length: 2, 0: 'Network', 1: 'WebBrowser'}})), 'U+F059F');
-  assert.equal(cp(look({id: 'zz', name: 'Gimme'})), 'U+F0BFF');
-  assert.equal(cp(look({id: 'zz', name: 'hermes'})), 'U+F0C02');
-  assert.equal(cp(look({id: 'zz', name: 'zed'})), 'U+F0C38');
-  assert.equal(cp(look({id: 'zz', name: '1Up'})), 'U+F0614');
-  assert.equal(cp(look(null)), 'U+F0614');
-  // without the logo table a brand app falls through to its initial
-  assert.equal(cp(glyphs.look({id: 'chromium', name: 'Chromium'})), 'U+F0BF3');
-});
-
-test('overrides take a logo slug, an SVG path, a symbol or its hex code', () => {
-  assert.deepEqual(look({id: 'Home Server', name: 'Home Server'}, {'Home Server': 'hp'}), logo('hp'));
-  assert.deepEqual(look({id: 'some-bot', name: 'Some Bot'}, {'Some Bot': 'M0 0h24v24H0z'}), {path: 'M0 0h24v24H0z'});
-  assert.equal(cp(look({id: 'some-bot', name: 'Some Bot'}, {'some-bot': 'U+F048B'})), 'U+F048B');
-  assert.deepEqual(look({id: 'a', name: 'A'}, {a: '\u2605'}), {glyph: '\u2605'});
-  // junk, or a path with anything but path commands, is ignored
-  for (const bad of ['', 'abc', 'zzzzzzz', '0x1', 'M0 0"/><script>', 5, null])
-    assert.deepEqual(look({id: 'chromium', name: 'Chromium'}, {chromium: bad}), logo('googlechrome'), String(bad));
-});
-
-test('apps with no logo or tool symbol use the shape traced from their icon', () => {
-  const marks = {'some-icon': {path: 'M0 0h24v24H0z'}, empty: {path: ''}};
-  assert.deepEqual(glyphs.look({id: 'q', name: 'Qq', icon: 'some-icon'}, {}, brands, marks), {path: 'M0 0h24v24H0z', evenodd: true});
-  // a logo or a tool symbol still wins, an empty trace falls through
-  assert.deepEqual(glyphs.look({id: 'obsidian', name: 'Obsidian', icon: 'some-icon'}, {}, brands, marks), logo('obsidian'));
-  assert.equal(cp(glyphs.look({id: 'q', name: 'Files', icon: 'some-icon'}, {}, brands, marks)), 'U+F024B');
-  assert.equal(cp(glyphs.look({id: 'q', name: 'Qq', icon: 'empty'}, {}, brands, marks)), 'U+F0C1D');
-});
-
-test('a logo becomes an SVG filled with the given color', () => {
-  const url = glyphs.svgUrl('M0 0h24v24H0z', '#ffaa00');
-  assert.ok(url.startsWith('data:image/svg+xml;utf8,'));
-  const svg = decodeURIComponent(url.slice(24));
-  assert.match(svg, /viewBox="0 0 24 24"/);
-  assert.match(svg, /<path fill="#ffaa00" d="M0 0h24v24H0z"\/>/);
-  assert.match(decodeURIComponent(glyphs.svgUrl('M0 0Z', '#fff', true).slice(24)), /fill-rule="evenodd"/);
-});
-
-test('parse keeps icon overrides as strings of a sane length', () => {
-  const d = config.parse(JSON.stringify({dockSymbols: {a: 'f048b', b: 7, c: 'M' + '1'.repeat(20000), p: 'M0 0h24v24H0z'}})).dockSymbols;
-  assert.deepEqual(d, {a: 'f048b', p: 'M0 0h24v24H0z'});
-  assert.deepEqual(config.parse(JSON.stringify({dockSymbols: ['f048b']})).dockSymbols, {});
-  assert.deepEqual(config.defaults().dockSymbols, {});
 });

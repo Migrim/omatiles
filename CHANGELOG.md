@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Translucent tiles are a setting:** new `translucent` option (default on). Off gives solid tiles. The desk's
+  right-click menu has a switch for it.
+- **Arranging is easier to see:** a tile turns red while its drop spot overlaps another tile, the move, resize,
+  send and remove handles are larger and show hover labels, and the arrange hint says Esc finishes.
+- **The dock is gone:** the tile grid now uses the whole desk. The pinned and recent apps, their themed icons
+  and logos, `dock`, `dockMono` and `dockSymbols` in the config, and the pin/recent/marks backend operations are removed.
+  Page dots sit at the bottom edge. Old config files keep working; the unused keys are ignored.
+
 ## 2.1.0 (2026-10-17)
 
 - **Each tile has its own menu:** right-click a tile, or press and hold it, for what that tile can do (12- or

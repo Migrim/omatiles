@@ -1,11 +1,7 @@
 # OmaTiles
 
-![OmaTiles on workspace 1: this machine, weather, clock, a koi pond widget, sun & moon, calendar and the dock](preview.png)
-
-*The koi pond is a widget from the store; the rest is built in.*
-
 A home screen for Omarchy. Your first desktop, or your first two or three, becomes a
-dashboard: a 16 x 8 grid of tiles above an app dock, drawn in your current Omarchy
+dashboard: a 16 x 8 grid of tiles, drawn in your current Omarchy
 theme and following it when you switch themes. It works like the home screen of the
 Omarchy Android launcher.
 
@@ -22,9 +18,6 @@ dashboard is always a glance away.
 - **Widgets:** the reviewed widgets from the [OWL widget store](https://github.com/SimonSchubert/omarchy-widgets)
   (the same ones the Android launcher uses), plus your own, written by Claude Code
   from one sentence.
-- **Dock:** your pinned apps, then the ones you used recently. Like a phone's themed
-  icon pack, the icons can be drawn flat in your bar's color: each app's own logo, or,
-  for apps no logo set has, its own shape traced from its icon.
 
 Floating pop-ups, like the volume or Wi-Fi panels, can still open over the dashboard.
 If you move a window onto a tile desktop yourself (Super+Shift+1), the desk sits under
@@ -79,7 +72,6 @@ desk N** and **remove**.
   checker reviews it. The store then shows every command it runs, the same way it shows a
   store widget, and the widget goes on the desk only when you press **add to desk**.
 - **tile desktops: 1 / 1–2 / 1–3**
-- **dock icons: symbols / full color**
 - **theme:** switch Omarchy themes from the desk.
 
 New tiles go on the desk you're looking at, shrunk to fit if they need to be. When
@@ -87,7 +79,7 @@ there's no room at all, the new tile sits on top of the others and arrange mode 
 so you can drag it into place or remove a tile you don't need.
 
 Many store widgets open their own screen (settings or detail view) when you click
-them, as on the phone. **Right-click a dock icon** to pin or unpin it.
+them, as on the phone.
 
 ### Keyboard
 
@@ -123,9 +115,6 @@ Everything below is optional:
   "desks": 1,
   "units": "auto",
   "clock": "auto",
-  "dockMono": false,
-  "dockSymbols": {"my-server-app": "f048b"},
-  "dock": ["chromium", "com.mitchellh.ghostty", "obsidian"],
 
   "local": {
     "services": [{"label": "Dictation", "unit": "voxtype.service"}]
@@ -157,19 +146,12 @@ Everything below is optional:
 - **desks:** how many workspaces, counting from 1, are tile desktops: `1`, `2` or `3`.
   The desk asks on first run, and the right-click menu changes it. New tiled windows
   on those workspaces move to the next one. Tiles on desktops you turn off are kept.
+- **translucent:** `true` (the default) lets the wallpaper show faintly through tiles; `false` makes
+  them solid. The desk's right-click menu switches it.
 - **units:** `auto` follows your locale, or set `metric` or `imperial`. The weather
   tile's menu switches it.
 - **clock:** `auto` follows your locale's 12- or 24-hour time, or set `"12"` or `"24"`.
   The clock tile's menu switches it, for every time on the desk.
-- **dock:** desktop entry ids, without `.desktop`.
-- **dockMono:** `true` draws the dock in the bar's color. About 80 common apps get their
-  logo from [Simple Icons](https://simpleicons.org). Generic tools (files, calculator,
-  some terminals) get a Nerd Font symbol. Any other app gets its own shape, traced once
-  from its PNG icon and cached. An app with no usable icon shows its initial in a circle.
-- **dockSymbols:** pick the icon for an app. Use its desktop id or name as the key. The
-  value can be a Simple Icons name that OmaTiles ships (`hp`, `github`…), a 24 x 24 SVG
-  path (`M…`), a symbol's code from the [Nerd Fonts cheat sheet](https://www.nerdfonts.com/cheat-sheet)
-  (`f048b` or `U+F048B`), or the symbol itself.
 - **local.services and remote.services:** up to six systemd units each, glob patterns
   allowed. `user` defaults to `true` (a `--user` unit); use `false` for system units.
   The card shows how many matching units are running. This machine's card also shows
@@ -270,5 +252,3 @@ Basecamp, Anthropic, OpenAI, xAI or Nous Research.
 
 MIT
 
-Brand logos in the dock come from [Simple Icons](https://simpleicons.org) (CC0; see `brands/`).
-The logos are trademarks of their owners.

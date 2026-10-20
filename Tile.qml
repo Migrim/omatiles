@@ -35,10 +35,20 @@ Rectangle {
     z: drag.pressed || resize.pressed ? 10 : stacked ? 5 : 1
     radius: Style.cornerRadius
     readonly property bool stacked: !!place && place.top === true
-    // Stacked: solid, so the tiles underneath don't show through it.
-    color: stacked ? Color.background : Util.alpha(Color.background, 0.82)
+    // Solid when stacked (the tiles underneath mustn't show through) or when translucency is off.
+    color: stacked || !desk.translucent ? Color.background : Util.alpha(Color.background, 0.82)
+    // While dragging or resizing: does the cell it would drop on overlap another tile?
+    readonly property bool colliding: (drag.pressed || resize.pressed) && !stacked && overlapsOther()
+    function overlapsOther() {
+        for (var k in desk.tileItems) {
+            var o = desk.tileItems[k];
+            if (o === tile || !o.visible || o.stacked) continue;
+            if (col < o.col + o.spanW && o.col < col + spanW && row < o.row + o.spanH && o.row < row + spanH) return true;
+        }
+        return false;
+    }
     border.width: desk.editing || focused ? 2 : 1
-    border.color: desk.editing || focused ? desk.ink : Util.alpha(Color.foreground, 0.1)
+    border.color: colliding ? desk.danger : desk.editing || focused ? desk.ink : Util.alpha(Color.foreground, 0.1)
     clip: true
     Component.onCompleted: desk.registerTile(tile)
     Component.onDestruction: desk.unregisterTile(tile)
@@ -56,6 +66,12 @@ Rectangle {
         anchors.fill: parent
         anchors.margins: tile.padded ? Style.spacing.panelPadding - 2 : 0
         opacity: desk.editing && !tile.stacked ? 0.5 : 1
+    }
+    // Red wash over the tile while its drop spot would overlap another tile.
+    Rectangle {
+        anchors.fill: parent; radius: tile.radius
+        visible: tile.colliding
+        color: Util.alpha(desk.danger, 0.18)
     }
     MouseArea {
         id: drag
@@ -82,19 +98,31 @@ Rectangle {
         property string glyph
         property color tone: tile.desk.ink
         property bool hot: false
+        property bool hovered: false
+        property bool tipAbove: false
         visible: tile.desk.editing
-        height: 24; width: Math.max(24, label.implicitWidth + 12); radius: Style.cornerRadius
+        height: 32; width: Math.max(32, label.implicitWidth + 16); radius: Style.cornerRadius
         Accessible.role: Accessible.Button
         color: Util.alpha(tone, hot ? 0.45 : 0.2)
         border.width: 1; border.color: tone
         Text { id: label; anchors.centerIn: parent; text: handle.glyph; color: handle.tone; font.family: Style.font.family; font.pixelSize: Style.font.body }
+        // Hover label, since the glyphs alone don't say what they do.
+        Rectangle {
+            visible: handle.hovered
+            z: 20
+            width: tipText.implicitWidth + 12; height: tipText.implicitHeight + 8; radius: Style.cornerRadius
+            anchors { right: parent.right; top: handle.tipAbove ? undefined : parent.bottom; bottom: handle.tipAbove ? parent.top : undefined; margins: 4 }
+            color: Color.background; border.width: 1; border.color: handle.tone
+            Text { id: tipText; anchors.centerIn: parent; text: handle.Accessible.name; color: Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.body }
+        }
     }
     Handle {
-        glyph: "󰑝"; hot: resize.pressed; Accessible.name: "resize"
+        glyph: "󰑝"; hot: resize.pressed; hovered: resize.containsMouse && !resize.pressed; tipAbove: true; Accessible.name: "resize"
         anchors { right: parent.right; bottom: parent.bottom; margins: Style.spacing.sm }
         MouseArea {
             id: resize
             anchors.fill: parent
+            hoverEnabled: true
             cursorShape: Qt.SizeFDiagCursor
             onPositionChanged: function(m) {
                 if (!pressed) return;
@@ -115,7 +143,7 @@ Rectangle {
             model: { var o = []; for (var n = 1; n <= desk.pages; n++) if (n !== desk.page) o.push(n); return o; }
             Handle {
                 required property int modelData
-                glyph: "\uf061 " + modelData; hot: sendMouse.containsMouse; Accessible.name: "send to desk " + modelData
+                glyph: "\uf061 " + modelData; hot: sendMouse.containsMouse; hovered: sendMouse.containsMouse; Accessible.name: "send to desk " + modelData
                 MouseArea { id: sendMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: desk.move(tile.key, parent.modelData) }
             }
         }
@@ -123,7 +151,7 @@ Rectangle {
     // Remove: hides a built-in tile, or puts a widget in the trash (the desk offers undo).
     Handle {
         id: closeHandle
-        glyph: ""; tone: desk.danger; hot: closeMouse.containsMouse; Accessible.name: "remove"
+        glyph: ""; tone: desk.danger; hot: closeMouse.containsMouse; hovered: closeMouse.containsMouse; Accessible.name: "remove"
         anchors { right: parent.right; top: parent.top; margins: Style.spacing.sm }
         MouseArea { id: closeMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: desk.remove(tile.key) }
     }

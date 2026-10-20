@@ -23,7 +23,7 @@ boundary the diff touches and answer these. Each finding gets a fix and a test t
 
    ```sh
    gh repo create pow3r-droid/omatiles --public --source . --remote origin \
-     --description "A tile desk for Omarchy: clock, calendar, weather, machine cards, agent chats, OWL widgets and a dock" --push
+     --description "A tile desk for Omarchy: clock, calendar, weather, machine cards, agent chats, OWL widgets" --push
    ```
 
 3. Submit it to the marketplace (github.com/omacom/omarchy-plugin-marketplace, see its SUBMISSION.md):

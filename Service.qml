@@ -10,11 +10,9 @@ import "Ui.js" as Ui
 import "calendar/Model.js" as Calendar
 import "owl" as Owl
 import "owl/Owl.js" as OwlJs
-import "Glyphs.js" as Glyphs
-import "Brands.js" as Brands
 
 // OmaTiles: a home screen on the first workspaces (1, 1-2 or 1-3, picked on first
-// run), a 16 x 8 grid of tiles above an app dock, drawn in the active Omarchy theme.
+// run), a 16 x 8 grid of tiles, drawn in the active Omarchy theme.
 // Later workspaces stay ordinary tiling ones. Right-click opens its menu.
 Scope {
     id: root
@@ -48,7 +46,7 @@ Scope {
     readonly property var monitor: deskScreen ? deskScreen.screen : null
     property int page: 1
     onDeskScreenChanged: if(deskScreen) page = deskScreen.page
-    onPageChanged: { menuOpen = false; tileMenu = null; dockPick = null; focusKey = ""; }
+    onPageChanged: { menuOpen = false; tileMenu = null; focusKey = ""; }
     readonly property bool shown: monitor !== null
     // Tiled windows cover the desk; it then stops animating and polling widgets.
     readonly property var deskWs: monitor ? Hyprland.monitorFor(monitor).activeWorkspace : null
@@ -58,7 +56,7 @@ Scope {
         target: Hyprland
         function onRawEvent(event) {
             if (/^(openwindow|closewindow|movewindow|changefloatingmode|fullscreen)/.test(event.name)) Hyprland.refreshToplevels();
-            if (event.name === "openwindow") { var w = event.parse(4); root.noteWindow(w[2] || ""); root.keepOff(w[0] || ""); }
+            if (event.name === "openwindow") { var w = event.parse(4); root.keepOff(w[0] || ""); }
         }
     }
     property bool editing: false
@@ -112,7 +110,7 @@ Scope {
         id: init
         command: ["python3", root.backend, "init", JSON.stringify(Config.defaults())]
         running: true
-        onExited: { settings.reload(); [calendarFile, gcalStatusFile, remoteFile, localFile, weatherFile, agentsFile, recentFile].forEach(function(f){ f.reload(); }); root.refresh(); }
+        onExited: { settings.reload(); [calendarFile, gcalStatusFile, remoteFile, localFile, weatherFile, agentsFile].forEach(function(f){ f.reload(); }); root.refresh(); }
     }
     FileView {
         id: settings; printErrors: false; path: root.home + "/.config/omarchy/omatiles.json"; watchChanges: true
@@ -127,7 +125,6 @@ Scope {
     JsonFile { id: localFile; path: root.cache + "local.json" }
     JsonFile { id: weatherFile; path: root.cache + "weather.json" }
     JsonFile { id: agentsFile; path: root.cache + "agents.json"; fallback: ({}) }
-    JsonFile { id: recentFile; path: root.cache + "recent.json"; fallback: [] }
     readonly property var events: Array.isArray(calendarFile.value) ? calendarFile.value : []
     readonly property string gcalState: gcalStatusFile.value && gcalStatusFile.value.state || "disconnected"
     readonly property var remote: remoteFile.value
@@ -205,21 +202,6 @@ Scope {
     function sunTime(text, withAp) { var t = clockTime(text); return isFinite(t) ? hm(t, withAp) : ""; }
     function span(ms) { var m=Math.max(0,Math.round(ms/60000)); return Math.floor(m/60)+"h "+(m%60)+"m"; }
 
-    // ── Dock: pinned apps, then the ones used recently ──────────────────────
-    function launchApp(id) { if(id) Quickshell.execDetached(["uwsm-app","--","gtk-launch",id+".desktop"]); }
-    function entry(id) { var e = id ? DesktopEntries.byId(id) : null; return e && !e.noDisplay ? e : null; }
-    function icon(e) { var p=e && e.icon ? Quickshell.iconPath(e.icon, true) : ""; return p || Quickshell.iconPath("application-x-executable", true); }
-    // The desktop entry behind a new window's class, only when the match is certain.
-    function entryForClass(cls) {
-        if (!cls || cls.indexOf("org.omarchy.omatiles") === 0) return null;
-        var e = DesktopEntries.byId(cls) || DesktopEntries.byId(cls.toLowerCase());
-        if (!e) {
-            var h = DesktopEntries.heuristicLookup(cls), low = cls.toLowerCase();
-            if (h && (h.startupClass === cls || h.id.toLowerCase() === low || h.id.toLowerCase().endsWith("." + low))) e = h;
-        }
-        return e && !e.noDisplay ? e : null;
-    }
-    Process { id: recentProc; onExited: recentFile.reload() }
     // Tile desktops are locked, like a phone's home screen: a tiled window that
     // opens on one moves to the first ordinary workspace, and the view follows it.
     // Floating pop-ups (volume, Wi-Fi…) may stay; they don't cover the tiles.
@@ -242,27 +224,6 @@ Scope {
             });
         }
     }
-    function noteWindow(cls) {
-        var e = entryForClass(cls);
-        var list = Array.isArray(recentFile.value) ? recentFile.value : [];
-        if (e && list[0] !== e.id) run(recentProc, ["recent", e.id]);
-    }
-    // App entries load after the desk does; reading the list here rebuilds the dock when they arrive.
-    readonly property var pinnedApps: (themeSlug, DesktopEntries.applications.values, config.dock.map(entry).filter(function(e){ return !!e; }))
-    readonly property var recentApps: {
-        var pinned = config.dock, list = Array.isArray(recentFile.value) ? recentFile.value : [];
-        return (themeSlug, DesktopEntries.applications.values, list.filter(function(id){ return pinned.indexOf(id) === -1; }).map(entry).filter(function(e){ return !!e; }));
-    }
-    // Apps with no logo get their own shape, traced from their icon once (cache/marks.json).
-    JsonFile { id: marksFile; path: root.cache + "marks.json"; fallback: ({}) }
-    Process { id: marksProc; onExited: marksFile.reload() }
-    readonly property var dockIcons: config.dockMono ? pinnedApps.concat(recentApps).map(function(e){ return e.icon || ""; }).filter(function(n){ return n; }) : []
-    onDockIconsChanged: marksTimer.restart()
-    Timer { id: marksTimer; interval: 500; onTriggered: if (root.dockIcons.length && !root.run(marksProc, ["marks", JSON.stringify(root.dockIcons)])) restart() }
-    property var dockPick: null
-    Process { id: pinProc }
-    function pin(id, on) { run(pinProc, [on ? "pin" : "unpin", id]); dockPick = null; }
-
     // ── Widgets from the store, and the ones Claude writes ──────────────────
     readonly property string widgetDir: home + "/.config/omarchy/omatiles/widgets/"
     readonly property string storeUrl: "https://simonschubert.github.io/omarchy-widgets/"
@@ -477,7 +438,7 @@ Scope {
         function create(): void { root.openCreate(); }
         function focus(): void { if (root.focusing) root.stopFocus(); else root.startFocus(); }
         function close(): void {
-            root.menuOpen = false; root.tileMenu = null; root.storeOpen = false; root.createOpen = false; root.editing = false; root.dockPick = null;
+            root.menuOpen = false; root.tileMenu = null; root.storeOpen = false; root.createOpen = false; root.editing = false;
             root.stopFocus();
             if (root.screenWidget) root.screenWidget.closeScreen();
         }
@@ -506,12 +467,12 @@ Scope {
             readonly property color ink: root.ink
             readonly property color muted: root.muted
             readonly property color danger: root.danger
+            readonly property bool translucent: root.config.translucent !== false
             readonly property string focusKey: root.focusing ? root.focusKey : ""
             readonly property bool focusing: root.focusing
             readonly property real margin: 10
             readonly property real gap: 8
-            readonly property real dockH: 58
-            readonly property real gridH: height - 2*margin - dockH - gap
+            readonly property real gridH: height - 2*margin
             readonly property real cellW: (width - 2*margin - (Config.COLS-1)*gap) / Config.COLS
             readonly property real cellH: (gridH - (Config.ROWS-1)*gap) / Config.ROWS
             function cellX(c) { return margin + c*(cellW+gap); }
@@ -525,15 +486,15 @@ Scope {
                 return Math.max(1, Math.min(max, Math.round((len+gap)/(cell+gap))));
             }
             function openMenu(x, y) {
-                root.menuX = x; root.menuY = y; root.menuOpen = true; root.tileMenu = null; root.dockPick = null;
+                root.menuX = x; root.menuY = y; root.menuOpen = true; root.tileMenu = null;
                 root.loadThemes();
                 if (root.config.menuHint) root.setOption("menuHint", false);
             }
             function openTileMenu(t, x, y) {
-                root.menuOpen = false; root.dockPick = null; root.menuX = x; root.menuY = y; root.tileMenu = t;
+                root.menuOpen = false; root.menuX = x; root.menuY = y; root.tileMenu = t;
             }
             // A plain click on the desk or on a tile's empty part closes what's open.
-            function dismiss() { root.typing = false; root.menuOpen = false; root.tileMenu = null; root.dockPick = null; if (root.editing) root.editing = false; }
+            function dismiss() { root.typing = false; root.menuOpen = false; root.tileMenu = null; if (root.editing) root.editing = false; }
             function move(key, page) { root.run(removeProc, ["move", key, String(page)]); }
             function remove(key) { root.removeTile(key); }
             function place(key, g) { root.run(placeProc, ["place", key, JSON.stringify(g)]); }
@@ -1047,20 +1008,20 @@ Scope {
             }
             Chip {
                 visible: root.config.menuHint && !root.choosing && !root.editing && !root.menuOpen && !root.storeOpen && !root.createOpen && root.undoKey === ""
-                anchors { horizontalCenter: parent.horizontalCenter; bottom: dock.top; bottomMargin: desk.gap * 2 }
+                anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: desk.margin + desk.gap * 2 }
                 ChipText { text: "Right-click the desk for widgets, themes and arranging" }
                 ChipLink { text: ""; onHit: root.setOption("menuHint", false) }
             }
             Chip {
                 visible: root.editing && !root.menuOpen && !root.storeOpen
-                anchors { horizontalCenter: parent.horizontalCenter; bottom: dock.top; bottomMargin: desk.gap * 2 }
-                ChipText { text: root.stacked ? "The new tile sits on top: drag it into place, or remove a tile you don't need" : (root.focusing ? "Arrows move the tile · Shift+arrows resize · " : "Drag to move · corner to resize · ") + (root.pages > 1 ? "  N moves it to desk N · " : "") + " remove" }
+                anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: desk.margin + desk.gap * 2 }
+                ChipText { text: root.stacked ? "The new tile sits on top: drag it into place, or remove a tile you don't need" : (root.focusing ? "Arrows move the tile · Shift+arrows resize · " : "Drag to move · corner to resize · ") + (root.pages > 1 ? "  N moves it to desk N · " : "") + " remove · Esc or click the desk to finish" }
                 ChipLink { text: "done"; onHit: root.editing = false }
             }
             Chip {
                 z: 49
                 visible: root.undoKey !== "" && !root.editing
-                anchors { horizontalCenter: parent.horizontalCenter; bottom: dock.top; bottomMargin: desk.gap * 2 }
+                anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: desk.margin + desk.gap * 2 }
                 ChipText { text: "Removed " + root.tileName(root.undoKey) }
                 ChipLink { text: "undo"; onHit: root.undoRemove() }
             }
@@ -1072,7 +1033,7 @@ Scope {
             }
             Chip {
                 visible: root.focusing && !root.typing && !root.editing
-                anchors { horizontalCenter: parent.horizontalCenter; bottom: dock.top; bottomMargin: desk.gap * 2 }
+                anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: desk.margin + desk.gap * 2 }
                 ChipText { text: "Arrows pick a tile · Enter uses it · M menu · S store · A arrange · Esc leaves" }
             }
 
@@ -1154,8 +1115,7 @@ Scope {
                     id: menuCol; x: 16; y: 14; width: parent.width - 32; spacing: Style.spacing.sm
                     Repeater {
                         model: [{t: root.editing ? "done arranging" : "arrange tiles", a: "arrange"},
-                                {t: "widget store", a: "store"}, {t: "new widget with claude", a: "create"},
-                                {t: root.config.dockMono ? "use full-color dock icons" : "use symbol dock icons", a: "mono"}]
+                                {t: "widget store", a: "store"}, {t: "new widget with claude", a: "create"}]
                         Rectangle {
                             required property var modelData
                             width: parent.width; height: 34; radius: Style.cornerRadius
@@ -1167,10 +1127,22 @@ Scope {
                                     root.menuOpen = false;
                                     if (modelData.a === "arrange") root.editing = !root.editing;
                                     else if (modelData.a === "store") root.openStore();
-                                    else if (modelData.a === "mono") root.setOption("dockMono", !root.config.dockMono);
                                     else root.openCreate();
                                 }
                             }
+                        }
+                    }
+                    Item {
+                        width: parent.width; height: 34
+                        Text { x: 8; anchors.verticalCenter: parent.verticalCenter; text: "translucent tiles"; color: Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.heading - 1 }
+                        Rectangle {
+                            anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                            Accessible.role: Accessible.CheckBox; Accessible.name: "translucent tiles"; Accessible.checked: root.config.translucent
+                            width: 46; height: 26; radius: Style.cornerRadius
+                            color: root.config.translucent ? root.ink : (translucentMouse.containsMouse ? Util.alpha(root.ink, 0.14) : "transparent")
+                            border.width: 1; border.color: root.config.translucent ? root.ink : Util.alpha(root.ink, 0.4)
+                            Text { anchors.centerIn: parent; text: root.config.translucent ? "on" : "off"; color: root.config.translucent ? Color.background : root.ink; font.family: Style.font.family; font.pixelSize: Style.font.body }
+                            MouseArea { id: translucentMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.setOption("translucent", !root.config.translucent) }
                         }
                     }
                     Item {
@@ -1238,7 +1210,7 @@ Scope {
                 opacity: root.storeOpen ? 1 : 0; visible: opacity > 0
                 Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
                 x: desk.margin; y: desk.margin
-                width: desk.width - 2*desk.margin; height: desk.gridH + desk.gap + desk.dockH
+                width: desk.width - 2*desk.margin; height: desk.gridH
                 color: Color.background; border.width: 2; border.color: root.ink; radius: Style.cornerRadius
                 MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton }
                 Text { x: 20; y: 14; text: "widget store"; color: root.ink; font.family: Style.font.family; font.pixelSize: Style.font.display - 2 }
@@ -1583,92 +1555,17 @@ Scope {
                 }
             }
 
-            // ── App dock: pinned apps, a divider, recent ones ───────────────
-            Rectangle {
-                id: dock
-                x: desk.margin; y: desk.margin + desk.gridH + desk.gap
-                width: desk.width - 2*desk.margin; height: desk.dockH
-                radius: Style.cornerRadius
-                color: Util.alpha(Color.background, 0.82); border.width: 1; border.color: Util.alpha(Color.foreground, 0.1)
-                property string hovered: ""
-                readonly property int slots: Math.max(1, Math.floor((width - 220) / 50))
-                readonly property var pinned: root.pinnedApps.slice(0, slots)
-                readonly property var recent: root.recentApps.slice(0, Math.max(0, slots - pinned.length))
-                component AppIcon: Rectangle {
-                    id: app
-                    required property var modelData
-                    property bool pinned: true
-                    width: 44; height: 44; radius: Style.cornerRadius
-                    Accessible.role: Accessible.Button; Accessible.name: app.modelData.name
-                    color: appMouse.containsMouse || (root.dockPick && root.dockPick.id === modelData.id) ? Util.alpha(root.ink, 0.18) : "transparent"
-                    Image { anchors.centerIn: parent; width: 30; height: 30; sourceSize: Qt.size(60,60); source: root.config.dockMono ? "" : root.icon(app.modelData); smooth: true; cache: false; visible: !root.config.dockMono }
-                    // Themed icons, like the tablet's icon pack: the app's own logo, or its own
-                    // shape traced from its icon, drawn flat in the bar's color (an SVG path, so no
-                    // tint over a picture); a font symbol for generic tools; else its initial.
-                    readonly property var mark: root.config.dockMono ? Glyphs.look(app.modelData, root.config.dockSymbols, Brands.PATHS, marksFile.value) : null
-                    Image {
-                        anchors.centerIn: parent; width: 28; height: 28; sourceSize: Qt.size(56, 56)
-                        visible: !!app.mark && !!app.mark.path
-                        source: visible ? Glyphs.svgUrl(app.mark.path, String(root.ink), !!app.mark.evenodd) : ""
-                    }
-                    Text {
-                        anchors.centerIn: parent; visible: !!app.mark && !app.mark.path
-                        text: visible ? app.mark.glyph : ""
-                        color: root.ink; font.family: Style.font.family; font.pixelSize: 32
-                    }
-                    MouseArea {
-                        id: appMouse; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                        acceptedButtons: Qt.LeftButton | Qt.RightButton
-                        onContainsMouseChanged: dock.hovered = containsMouse ? app.modelData.name : (dock.hovered===app.modelData.name ? "" : dock.hovered)
-                        onClicked: function(m) {
-                            if (m.button === Qt.RightButton) {
-                                var p = app.mapToItem(desk, 0, 0);
-                                root.menuOpen = false;
-                                root.dockPick = {id: app.modelData.id, name: app.modelData.name, pinned: app.pinned, x: p.x};
-                            } else { root.dockPick = null; root.launchApp(app.modelData.id); }
-                        }
-                    }
-                }
-                Row {
-                    anchors.verticalCenter: parent.verticalCenter; x: 10; spacing: Style.spacing.md
-                    Repeater { model: dock.pinned; AppIcon {} }
-                    Rectangle { visible: dock.recent.length > 0 && dock.pinned.length > 0; width: 1; height: 28; anchors.verticalCenter: parent.verticalCenter; color: Util.alpha(Color.foreground, 0.2) }
-                    Repeater { model: dock.recent; AppIcon { pinned: false } }
-                }
-                Row {
-                    anchors { right: parent.right; rightMargin: 14; verticalCenter: parent.verticalCenter }
-                    spacing: Style.spacing.xxl
-                    Text { anchors.verticalCenter: parent.verticalCenter; text: dock.hovered; color: root.muted; font.family: Style.font.family; font.pixelSize: Style.font.body }
-                    // Which desk page this is, when there is more than one.
-                    Row {
-                        visible: root.pages > 1
-                        anchors.verticalCenter: parent.verticalCenter; spacing: Style.spacing.sm
-                        Repeater {
-                            model: root.pages
-                            Rectangle {
-                                required property int index
-                                width: index + 1 === root.page ? 18 : 6; height: 6; radius: 3
-                                color: index + 1 === root.page ? root.ink : Util.alpha(Color.foreground, 0.3)
-                            }
-                        }
-                    }
-                }
-            }
-            // Right-click on a dock icon: pin or unpin it.
-            Rectangle {
-                visible: !!root.dockPick; z: 50
-                width: pickCol.implicitWidth + 2*Style.spacing.xxl; height: pickCol.implicitHeight + 2*Style.spacing.lg
-                x: root.dockPick ? Math.max(desk.margin, Math.min(root.dockPick.x, desk.width - width - desk.margin)) : 0
-                y: dock.y - height - desk.gap
-                color: Color.background; border.width: 2; border.color: root.ink; radius: Style.cornerRadius
-                MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton }
-                Column {
-                    id: pickCol; x: Style.spacing.xxl; y: Style.spacing.lg; spacing: Style.spacing.sm
-                    Text { text: root.dockPick ? root.dockPick.name : ""; color: root.muted; font.family: Style.font.family; font.pixelSize: Style.font.body }
-                    Text {
-                        text: root.dockPick && root.dockPick.pinned ? "unpin from dock" : "pin to dock"
-                        color: pickMouse.containsMouse ? root.ink : Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.title
-                        MouseArea { id: pickMouse; anchors.fill: parent; anchors.margins: -6; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.pin(root.dockPick.id, !root.dockPick.pinned) }
+            // Which desk page this is, when there is more than one.
+            Row {
+                visible: root.pages > 1
+                anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: desk.margin / 2 - 3 }
+                spacing: Style.spacing.sm
+                Repeater {
+                    model: root.pages
+                    Rectangle {
+                        required property int index
+                        width: index + 1 === root.page ? 18 : 6; height: 6; radius: 3
+                        color: index + 1 === root.page ? root.ink : Util.alpha(Color.foreground, 0.3)
                     }
                 }
             }

@@ -5,11 +5,8 @@
 var COLS = 16, ROWS = 8, GRID = 16, PAGES = 3;
 var AGENTS = ['claude', 'codex', 'grok', 'hermes'];
 var BUILTIN = ['clock', 'local', 'remote', 'calendar', 'weather', 'sun', 'chat-claude', 'chat-codex', 'chat-grok', 'chat-hermes'];
-// Apps the dock pins on a fresh desk, when they are installed (Omarchy's defaults first).
-var DOCK = ['chromium', 'com.mitchellh.ghostty', 'Alacritty', 'org.gnome.Nautilus', 'obsidian', 'spotify',
-            'signal', 'typora', 'org.gnome.Calculator', 'localsend', 'xournalpp'];
 function defaults() {return {
-    grid:GRID, desks:0, dockMono:false, dockSymbols:{}, menuHint:true, units:'auto', clock:'auto',
+    grid:GRID, desks:0, menuHint:true, translucent:true, units:'auto', clock:'auto',
     tiles:{
         clock:{enabled:true,col:0,row:0,w:5,h:4},
         local:{enabled:true,col:5,row:0,w:6,h:4},
@@ -20,7 +17,6 @@ function defaults() {return {
         'chat-claude':{enabled:false,col:0,row:0,w:8,h:4}, 'chat-codex':{enabled:false,col:8,row:0,w:8,h:4},
         'chat-grok':{enabled:false,col:0,row:4,w:8,h:4}, 'chat-hermes':{enabled:false,col:8,row:4,w:8,h:4}
     },
-    dock:DOCK.slice(),
     local:{services:[]},
     remote:{host:'', name:'', services:[], link:{label:'', url:''}},
     chat:{host:'', where:'', agents:{}}
@@ -35,15 +31,12 @@ function services(list) {
 function parse(raw) {
     var base=defaults(), input; try {input=JSON.parse(raw);} catch(e){return base;}
     if(!input || typeof input!=='object') return base;
-    ['dockMono','menuHint'].forEach(function(k){ if(typeof input[k]==='boolean') base[k]=input[k]; });
+    if(typeof input.menuHint==='boolean') base.menuHint=input.menuHint;
+    if(typeof input.translucent==='boolean') base.translucent=input.translucent;
     if(typeof input.desks==='number' && isFinite(input.desks)) base.desks=clampInt(input.desks,1,PAGES);
     if(['auto','metric','imperial'].indexOf(input.units)!==-1) base.units=input.units;
     // 12- or 24-hour time; auto follows the locale.
     if(['auto','12','24'].indexOf(input.clock)!==-1) base.clock=input.clock;
-    // Per-app icon overrides: desktop id or app name -> a logo slug, an SVG path, a symbol or its hex code.
-    if(input.dockSymbols && typeof input.dockSymbols==='object' && !Array.isArray(input.dockSymbols))
-        Object.keys(input.dockSymbols).slice(0,64).forEach(function(k){ var v=input.dockSymbols[k]; if(typeof v==='string' && v.length<=12000) base.dockSymbols[k]=v; });
-    if(Array.isArray(input.dock)) base.dock=input.dock.filter(function(d){return typeof d==='string' && d.length>0;}).slice(0,24);
     if(input.local && typeof input.local==='object') base.local.services=services(input.local.services);
     var r=input.remote;
     if(r && typeof r==='object') {
